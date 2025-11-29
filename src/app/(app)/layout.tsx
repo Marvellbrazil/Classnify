@@ -11,6 +11,7 @@ import { MainNav } from '@/components/layout/main-nav';
 import { AppHeader } from '@/components/layout/app-header';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import Link from 'next/link';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 export default function AppLayout({
   children,
@@ -19,6 +20,7 @@ export default function AppLayout({
 }) {
   return (
     <SidebarProvider>
+      <FirebaseErrorListener />
       <Sidebar>
         <SidebarHeader>
           <Link
