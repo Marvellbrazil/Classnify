@@ -1,0 +1,303 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user in the system (either a teacher or a student).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "username": {
+          "type": "string",
+          "description": "The username of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the user (teacher or student)."
+        },
+        "profilePhoto": {
+          "type": "string",
+          "description": "URL of the user's profile photo.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "fullName",
+        "username",
+        "email",
+        "role"
+      ]
+    },
+    "Class": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Class",
+      "type": "object",
+      "description": "Represents a class or course.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Class entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the class."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the class."
+        },
+        "teacherId": {
+          "type": "string",
+          "description": "Reference to the Teacher who created the class. (Relationship: Teacher 1:N Class)"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "teacherId"
+      ]
+    },
+    "Assignment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Assignment",
+      "type": "object",
+      "description": "Represents an assignment given to students in a class.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Assignment entity."
+        },
+        "classId": {
+          "type": "string",
+          "description": "Reference to the Class this assignment belongs to. (Relationship: Class 1:N Assignment)"
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the assignment."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the assignment."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The due date for the assignment.",
+          "format": "date-time"
+        },
+        "questionType": {
+          "type": "string",
+          "description": "The question type for the assignment (short answer, multiple choice, checkbox)."
+        },
+        "answerKey": {
+          "type": "string",
+          "description": "The answer key for the assignment (used for auto-grading)."
+        }
+      },
+      "required": [
+        "id",
+        "classId",
+        "title",
+        "description",
+        "dueDate",
+        "questionType",
+        "answerKey"
+      ]
+    },
+    "Submission": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Submission",
+      "type": "object",
+      "description": "Represents a student's submission for an assignment.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Submission entity."
+        },
+        "assignmentId": {
+          "type": "string",
+          "description": "Reference to the Assignment this submission is for. (Relationship: Assignment 1:N Submission)"
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Reference to the Student who submitted the assignment. (Relationship: Student 1:N Submission)"
+        },
+        "submissionDate": {
+          "type": "string",
+          "description": "The date and time the submission was made.",
+          "format": "date-time"
+        },
+        "answer": {
+          "type": "string",
+          "description": "The student's answer to the assignment."
+        },
+        "score": {
+          "type": "number",
+          "description": "The score the student received on the assignment."
+        },
+        "matchedKeywords": {
+          "type": "string",
+          "description": "Keywords matched in the student's answer."
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the submission (e.g., graded, appealed)."
+        },
+        "feedback": {
+          "type": "string",
+          "description": "Feedback provided on the submission (AI-generated or teacher-provided)."
+        }
+      },
+      "required": [
+        "id",
+        "assignmentId",
+        "studentId",
+        "submissionDate",
+        "answer"
+      ]
+    },
+    "ClassEnrollment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ClassEnrollment",
+      "type": "object",
+      "description": "Represents the enrollment of a student in a class (Many-to-many relationship between Class and User).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ClassEnrollment entity."
+        },
+        "classId": {
+          "type": "string",
+          "description": "Reference to the Class the student is enrolled in. (Relationship: Class N:N User)"
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Reference to the User (student) enrolled in the class. (Relationship: Class N:N User)"
+        },
+        "enrollmentDate": {
+          "type": "string",
+          "description": "The date the student enrolled in the class.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "classId",
+        "studentId",
+        "enrollmentDate"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user information. Path-based ownership ensures only the user can access their data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/classes/{classId}",
+        "definition": {
+          "entityName": "Class",
+          "schema": {
+            "$ref": "#/backend/entities/Class"
+          },
+          "description": "Stores class information. Includes 'teacherId' for authorization independence, allowing rules to directly check if request.auth.uid == resource.data.teacherId.",
+          "params": [
+            {
+              "name": "classId",
+              "description": "The unique identifier of the class."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/classes/{classId}/assignments/{assignmentId}",
+        "definition": {
+          "entityName": "Assignment",
+          "schema": {
+            "$ref": "#/backend/entities/Assignment"
+          },
+          "description": "Stores assignment information for a given class.  Inherits authorization from the parent Class document.",
+          "params": [
+            {
+              "name": "classId",
+              "description": "The unique identifier of the class."
+            },
+            {
+              "name": "assignmentId",
+              "description": "The unique identifier of the assignment."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/submissions/{submissionId}",
+        "definition": {
+          "entityName": "Submission",
+          "schema": {
+            "$ref": "#/backend/entities/Submission"
+          },
+          "description": "Stores student submissions for assignments. Path-based ownership under the user's document ensures only the student and the teacher of the related class (via assignment reference) can access the submissions.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user (student)."
+            },
+            {
+              "name": "submissionId",
+              "description": "The unique identifier of the submission."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/class_enrollments/{classEnrollmentId}",
+        "definition": {
+          "entityName": "ClassEnrollment",
+          "schema": {
+            "$ref": "#/backend/entities/ClassEnrollment"
+          },
+          "description": "Stores enrollment information for students in classes.",
+          "params": [
+            {
+              "name": "classEnrollmentId",
+              "description": "The unique identifier of the class enrollment."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to support the AIAcademy application's requirements, focusing on user roles (teacher/student), class management, assignment creation/submission, and AI-powered grading. The structure prioritizes authorization independence and clear security rules by denormalizing authorization data where necessary.\n\n**Authorization Independence:**\n\n*   `Classes`: Each `Class` document includes the `teacherId` field to identify the teacher who created it. This enables direct rule creation based on `request.auth.uid == resource.data.teacherId` without needing to perform a `get()` operation on a parent document.\n*   `Assignments`: Each `Assignment` includes `classId` for association with a class. This association is leveraged for path-based rules. No denormalized authorization is needed here as it inherits permissions from the Class.\n*   `Submissions`: Each `Submission` includes `assignmentId` and `studentId`.  Similar to Assignments, the primary authorization is tied to the student who owns the submission (path-based) and the assignment it belongs to, and leverages the relationship to the assignment (and indirectly, the class).  No explicit denormalization is needed.\n*   `ClassEnrollments`:  This collection manages student enrollment in classes. Although it connects `Class` and `User`, its primary use is for managing membership.  Listing enrollments is secured at the collection group level (see below).\n\n**QAPs (Rules Are Not Filters):**\n\n*   User-owned data (e.g., Submissions) is stored under `/users/{userId}` to allow secure `list` operations.\n*   Classes are listed at the root `/classes` collection with security rules enforcing that only the teacher can list their own classes. This is further secured using `teacherId` within the `Class` document.\n*   ClassEnrollments are listed using collection group queries with a rule that enforces that the user must be either the student or the teacher to list the enrollment records.\n\n**Structural Segregation:**\nThe structure follows the principle of structural segregation by using dedicated collections for each entity (Users, Classes, Assignments, Submissions, ClassEnrollments). This simplifies the security rules and makes it easier to reason about the authorization logic. Different access requirements are accommodated by using appropriate paths and security rules.\n\n**Naming Conventions:**\nThe data structure employs consistent and semantic naming conventions for collections and document IDs. The use of meaningful names (e.g., `classes`, `assignments`, `submissions`) improves readability and maintainability. Wildcards are descriptive (e.g., `{userId}`, `{classId}`, `{assignmentId}`)."
+  }
+}

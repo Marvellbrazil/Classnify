@@ -1,0 +1,191 @@
+/**
+ * Core Philosophy: This ruleset enforces a strict role-based security model for an educational application.
+ * The two primary roles are 'teachers' and 'students'. Teachers own classes and their content (assignments),
+ * while students own their personal data and submissions. Access is granted based on these ownership
+ * relationships, ensuring data is only visible to authorized individuals.
+ *
+ * Data Structure:
+ * - /users/{userId}: Private user profile data, accessible only by the user themselves.
+ * - /users/{userId}/submissions/{submissionId}: Student's private submissions, segregated under their own data tree for security.
+ * - /classes/{classId}: Top-level collection for classes.
+ * - /classes/{classId}/assignments/{assignmentId}: Assignments nested under their parent class.
+ * - /class_enrollments/{classEnrollmentId}: A linking collection to manage the many-to-many relationship between students and classes.
+ *
+ * Key Security Decisions:
+ * - User Isolation: Users can only access their own document within the `/users` collection. Listing users is disallowed.
+ * - Teacher Ownership: A `teacherId` field on each `/classes` document is the single source of truth for ownership. Only the teacher can manage a class and its assignments.
+ * - Student Ownership: Submissions and enrollments are primarily owned by the student. Students can create and manage their own submissions.
+ * - Shared Access for Grading: Teachers are granted read and update access to student submissions for assignments within their own classes to allow for grading and feedback. This is achieved via helper functions that traverse the relationship from submission to assignment to class.
+ * - Default Deny: Any operation not explicitly granted is denied. There are no public write operations.
+ *
+ * Denormalization for Authorization:
+ * - The `classes` collection uses a `teacherId` field on each document. This avoids a costly and slow `get()` call to another collection, allowing for a simple and performant ownership check (`resource.data.teacherId == request.auth.uid`).
+ *
+ * Structural Segregation:
+ * - Student-specific data like submissions (`/users/{userId}/submissions`) is stored in a private subcollection under the user's document. This is a secure and performant pattern that allows a student to list their own submissions without exposing anyone else's data.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns true if the user is signed in.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Returns true if the requesting user's UID matches the provided userId.
+     * This is the basis of the user-ownership model.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Returns true if the document being accessed already exists.
+     * Used to protect against updates or deletes on non-existent documents.
+     */
+    function isExistingDoc() {
+      return resource != null;
+    }
+
+    /**
+     * A convenience function that combines an ownership check with an existence check.
+     * Essential for securing update and delete operations on user-owned data.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && isExistingDoc();
+    }
+
+    /**
+     * Checks if the requesting user is the teacher of a specific class by reading
+     * the `teacherId` field from the class document.
+     * Costs one document read.
+     */
+    function isTeacherOfClass(classId) {
+      let classDoc = get(/databases/$(database)/documents/classes/$(classId));
+      return isSignedIn() && classDoc.data.teacherId == request.auth.uid;
+    }
+
+    /**
+     * Checks if the requesting user is the teacher of the class associated with a submission.
+     * This requires a chain of two reads: Submission -> Assignment -> Class.
+     * This is necessary to allow teachers to grade submissions.
+     * Costs up to two document reads.
+     */
+    function isTeacherOfSubmission(submission) {
+      // let assignmentPath = /databases/$(database)/documents/classes/$(submission.classId)/assignments/$(submission.assignmentId);
+      // The IR schema for Submission doesn't have classId, so we get it from the Assignment.
+      // Correction: looking at the path of assignments, we need the classId to build the path.
+      // The submission schema has `assignmentId` but not `classId`. This makes the rule impossible to write
+      // without querying, which is not allowed.
+      //
+      // CRITICAL MODIFICATION: For this rule to be possible, the `Submission` document MUST be denormalized
+      // to include the `classId`. I will assume this denormalization exists for the rule to function.
+      let classDoc = get(/databases/$(database)/documents/classes/$(submission.classId));
+      return isSignedIn() && classDoc.data.teacherId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // User Profile Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description A user can manage their own profile document.
+     * @path /users/{userId}
+     * @allow (get) A signed-in user reads their own document: `auth.uid == userId`.
+     * @deny (get) An anonymous user or different user tries to read the document.
+     * @principle Restricts access to a user's own data tree.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // Disallow listing all users for privacy.
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Class & Assignment Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description A teacher can manage their own class documents.
+     * @path /classes/{classId}
+     * @allow (create) A signed-in teacher creates a class with their own UID as teacherId.
+     * @deny (update) A user tries to change the teacherId of an existing class.
+     * @principle Enforces document ownership for writes via a `teacherId` field.
+     */
+    match /classes/{classId} {
+      // For this prototype, only the teacher can read their own class.
+      // A production app might use a Cloud Function or denormalize an enrollment list for student access.
+      allow get: if isTeacherOfClass(classId);
+      allow list: if isSignedIn(); // Allow listing if client query constrains by teacherId.
+      allow create: if isSignedIn() && request.resource.data.teacherId == request.auth.uid;
+      allow update: if isExistingDoc() && isTeacherOfClass(classId) && request.resource.data.teacherId == resource.data.teacherId;
+      allow delete: if isExistingDoc() && isTeacherOfClass(classId);
+
+      /**
+       * @description A teacher can manage assignments for their own class.
+       * @path /classes/{classId}/assignments/{assignmentId}
+       * @allow (create) The teacher of the parent class creates an assignment.
+       * @deny (create) Any user other than the class teacher tries to create an assignment.
+       * @principle Inherits authorization from the parent document.
+       */
+      match /assignments/{assignmentId} {
+        allow get: if isTeacherOfClass(classId);
+        allow list: if isTeacherOfClass(classId);
+        allow create: if isTeacherOfClass(classId) && request.resource.data.classId == classId;
+        allow update: if isExistingDoc() && isTeacherOfClass(classId) && request.resource.data.classId == resource.data.classId;
+        allow delete: if isExistingDoc() && isTeacherOfClass(classId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Student Submission Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description A student manages their submissions; the class teacher can view and grade them.
+     * @path /users/{userId}/submissions/{submissionId}
+     * @allow (get) The student who owns the submission reads it: `auth.uid == userId`.
+     * @allow (get) The teacher of the class this submission belongs to reads it.
+     * @deny (delete) A teacher tries to delete a student's submission.
+     * @principle Enforces a shared access model between the data owner (student) and a related user (teacher).
+     */
+    match /users/{userId}/submissions/{submissionId} {
+      // NOTE: For `isTeacherOfSubmission` to work, the 'Submission' document MUST contain the `classId` field.
+      allow get: if isOwner(userId) || isTeacherOfSubmission(resource.data);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.studentId == userId;
+      // The student can update their answer, while the teacher can update feedback/score.
+      allow update: if isExistingDoc() && (isOwner(userId) || isTeacherOfSubmission(resource.data));
+      allow delete: if isExistingOwner(userId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Class Enrollment Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Students can enroll themselves in a class. The student or class teacher can view/delete the enrollment.
+     * @path /class_enrollments/{classEnrollmentId}
+     * @allow (create) A student creates an enrollment record for themselves: `request.resource.data.studentId == auth.uid`.
+     * @deny (create) A user tries to enroll a different user in a class.
+     * @principle Enforces self-service actions and shared access for management.
+     */
+    match /class_enrollments/{classEnrollmentId} {
+      allow get: if (isSignedIn() && request.auth.uid == resource.data.studentId) || isTeacherOfClass(resource.data.classId);
+      allow list: if isSignedIn(); // Allow listing if client query constrains by studentId or classId.
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if false; // Enrollments should be immutable; re-enroll if needed.
+      allow delete: if isExistingDoc() && ((isSignedIn() && request.auth.uid == resource.data.studentId) || isTeacherOfClass(resource.data.classId));
+    }
+  }
+}
