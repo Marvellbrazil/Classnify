@@ -13,7 +13,7 @@ export default function AuthLayout({
           <Link href="/" className="flex items-center gap-2">
             <Icons.logo className="h-8 w-8 text-primary" />
             <h1 className="text-2xl font-bold font-headline text-foreground">
-              AIAcademy
+              Classnify
             </h1>
           </Link>
         </div>

@@ -27,7 +27,7 @@ export default function AppLayout({
           >
             <Icons.logo className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold font-headline group-data-[collapsible=icon]:hidden">
-              AIAcademy
+              Classnify
             </span>
           </Link>
         </SidebarHeader>

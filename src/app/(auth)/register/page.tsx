@@ -20,7 +20,7 @@ export default function RegisterPage() {
       <CardHeader className="space-y-1 text-center">
         <CardTitle className="text-2xl font-headline">Create an Account</CardTitle>
         <CardDescription>
-          Join AIAcademy and start your journey with AI-powered learning.
+          Join Classnify and start your journey with AI-powered learning.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

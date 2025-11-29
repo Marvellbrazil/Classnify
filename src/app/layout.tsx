@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'AIAcademy',
+  title: 'Classnify',
   description: 'Learn and teach with the power of AI',
 };
 
